@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ゆるかわモンスター マッチ3</title>
+<style>
+  :root{
+    --size: 8;
+    --board: min(92vw, 540px);
+    --gap: 6px;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif;
+    background: linear-gradient(160deg,#fdf2ff 0%, #eaf4ff 50%, #fff6ea 100%);
+    color:#34344a;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+    padding: 14px 10px 30px;
+    user-select:none;
+  }
+  h1{
+    font-size: clamp(20px, 5vw, 30px);
+    margin: 4px 0 12px;
+    letter-spacing:.5px;
+    color:#5b5b86;
+    text-shadow: 0 2px 0 #fff;
+  }
+  .hud{
+    width: var(--board);
+    display:flex; gap:8px; margin-bottom:12px;
+  }
+  .stat{
+    flex:1; background:#fff; border-radius:14px; padding:8px 6px;
+    text-align:center; box-shadow: 0 4px 0 rgba(120,120,170,.15), 0 6px 14px rgba(120,120,170,.18);
+  }
+  .stat .label{ font-size:11px; color:#9a9ac0; letter-spacing:.5px; }
+  .stat .value{ font-size: clamp(18px,5vw,24px); font-weight:800; color:#4a4a78; line-height:1.1; }
+  .stat.goal .value{ color:#e26ba0; }
+  .stat.moves .value{ color:#42a5b8; }
+
+  .board-wrap{
+    position:relative;
+    width: var(--board);
+    aspect-ratio: 1 / 1;
+    flex: 0 0 auto;
+  }
+  .board{
+    width:100%; height:100%;
+    display:grid;
+    grid-template-columns: repeat(var(--size), 1fr);
+    grid-template-rows: repeat(var(--size), 1fr);
+    gap: var(--gap);
+    background:#ffffff;
+    border-radius:20px;
+    padding: var(--gap);
+    box-shadow: inset 0 0 0 3px #ffe3f3, 0 10px 30px rgba(140,120,190,.25);
+  }
+  .cell{
+    position:relative;
+    border-radius:14px;
+    background:#f4f1fb no-repeat center/82%;
+    background-image: var(--img);
+    cursor:pointer;
+    transition: transform .14s ease, box-shadow .14s ease, opacity .18s ease;
+    will-change: transform, opacity;
+  }
+  .cell.sel{
+    box-shadow: 0 0 0 4px #ffb84d, 0 0 14px rgba(255,160,40,.7);
+    transform: scale(1.04);
+    z-index:3;
+  }
+  .cell.pop{
+    animation: pop .26s ease forwards;
+  }
+  .cell.drop{
+    animation: drop .26s ease;
+  }
+  @keyframes pop{
+    0%{ transform: scale(1); opacity:1; }
+    40%{ transform: scale(1.18) rotate(6deg); }
+    100%{ transform: scale(0) rotate(-20deg); opacity:0; }
+  }
+  @keyframes drop{
+    0%{ transform: translateY(-26%); }
+    70%{ transform: translateY(4%); }
+    100%{ transform: translateY(0); }
+  }
+
+  /* overlay dialog */
+  .overlay{
+    position:fixed; inset:0; background:rgba(60,40,80,.45);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .overlay.show{ display:flex; }
+  .dialog{
+    background:#fff; border-radius:22px; padding:26px 24px;
+    text-align:center; max-width:340px; width:100%;
+    box-shadow:0 20px 50px rgba(80,60,120,.4);
+    animation: rise .3s ease;
+  }
+  @keyframes rise{ from{ transform: translateY(20px); opacity:0;} to{ transform:none; opacity:1; } }
+  .dialog h2{ margin:0 0 6px; font-size:26px; }
+  .dialog.win h2{ color:#3bb273; }
+  .dialog.lose h2{ color:#e2696b; }
+  .dialog p{ margin:6px 0 18px; color:#6b6b8c; font-size:15px; }
+  .btn{
+    border:none; cursor:pointer; font-weight:800; font-size:16px;
+    color:#fff; background:linear-gradient(180deg,#ff9ac3,#ff6fa6);
+    padding:12px 26px; border-radius:999px;
+    box-shadow:0 5px 0 #d8538a, 0 8px 16px rgba(220,90,150,.4);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .btn:active{ transform: translateY(4px); box-shadow:0 1px 0 #d8538a; }
+  .restart-row{ margin-top:14px; }
+  .toast{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    background:rgba(255,255,255,.95); color:#e26ba0; font-weight:800;
+    padding:6px 16px; border-radius:999px; font-size:15px; pointer-events:none;
+    box-shadow:0 4px 12px rgba(150,100,170,.3);
+    opacity:0; transition:opacity .2s ease; z-index:5;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+  <h1>🍬 ゆるかわモンスター マッチ3</h1>
+
+  <div class="hud">
+    <div class="stat"><div class="label">スコア</div><div class="value" id="score">0</div></div>
+    <div class="stat goal"><div class="label">もくひょう</div><div class="value" id="goal">0</div></div>
+    <div class="stat moves"><div class="label">のこり手数</div><div class="value" id="moves">0</div></div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="restart-row">
+    <button class="btn" id="restartBtn">さいしょから</button>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="dialog" id="dialog">
+      <h2 id="dlgTitle"></h2>
+      <p id="dlgText"></p>
+      <button class="btn" id="dlgBtn">もういちど</button>
+    </div>
+  </div>
+
+<script>
+  // ===== 設定 =====
+  const SIZE = 8;
+  const GOAL = 1500;      // 目標スコア
+  const MAX_MOVES = 30;   // 手数
+
+  // 使用する8キャラ（同フォルダの相対パス）
+  const IMAGES = [
+    "無題65_20260609123918.png", // クリーム+赤帽子
+    "無題66_20260609124029.png", // 紫タコ
+    "無題68_20260609124401.png", // 濃ピンク
+    "無題69_20260609124647.png", // 緑・苺ヘタ
+    "無題70_20260609124833.png", // 赤白ボール
+    "無題72_20260609125200.png", // 水色
+    "無題73_20260609125311.png", // 薄ピンク雲
+    "無題78_20260609130719.png", // 薄紫・蝶ネクタイ
+  ];
+  // 画像が読めない場合のフォールバック色
+  const FALLBACK = ["#f3d9a8","#b18cf0","#f57fc8","#7fd6a7","#ff5b5b","#4fd6f0","#f7b8d6","#c9c4f5"];
+
+  // ===== 状態 =====
+  let board = [];        // board[r][c] = type id
+  let score = 0;
+  let moves = MAX_MOVES;
+  let busy = false;       // アニメ中は操作ロック
+  let sel = null;         // 選択中セル {r,c}
+
+  const boardEl   = document.getElementById("board");
+  const scoreEl   = document.getElementById("score");
+  const goalEl    = document.getElementById("goal");
+  const movesEl   = document.getElementById("moves");
+  const toastEl   = document.getElementById("toast");
+  const overlay   = document.getElementById("overlay");
+  const dialog    = document.getElementById("dialog");
+  const dlgTitle  = document.getElementById("dlgTitle");
+  const dlgText   = document.getElementById("dlgText");
+
+  document.documentElement.style.setProperty("--size", SIZE);
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const rndType = () => Math.floor(Math.random() * IMAGES.length);
+
+  // ===== 盤面生成（初期マッチなし） =====
+  function createBoard(){
+    board = [];
+    for(let r=0;r<SIZE;r++){
+      board[r]=[];
+      for(let c=0;c<SIZE;c++){
+        let t;
+        do { t = rndType(); }
+        while(
+          (c>=2 && board[r][c-1]===t && board[r][c-2]===t) ||
+          (r>=2 && board[r-1][c]===t && board[r-2][c]===t)
+        );
+        board[r][c]=t;
+      }
+    }
+  }
+
+  // ===== 描画 =====
+  function buildGrid(){
+    boardEl.innerHTML = "";
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+  function cellAt(r,c){ return boardEl.children[r*SIZE + c]; }
+
+  function paint(cell, t){
+    if(t===null || t===undefined){
+      cell.style.setProperty("--img","none");
+      cell.style.background = "#f4f1fb";
+      return;
+    }
+    cell.style.setProperty("--img", `url("${encodeURI(IMAGES[t])}")`);
+    // フォールバック色を裏に（画像が透明/読めない場合の保険）
+    cell.style.backgroundColor = "#f4f1fb";
+  }
+
+  function render(){
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        paint(cellAt(r,c), board[r][c]);
+      }
+    }
+  }
+
+  function updateHUD(){
+    scoreEl.textContent = score;
+    goalEl.textContent  = GOAL;
+    movesEl.textContent = moves;
+  }
+
+  // ===== マッチ検出 =====
+  function findMatches(){
+    const matched = Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+    // 横
+    for(let r=0;r<SIZE;r++){
+      let run=1;
+      for(let c=1;c<=SIZE;c++){
+        if(c<SIZE && board[r][c]!==null && board[r][c]===board[r][c-1]) run++;
+        else{
+          if(run>=3) for(let k=c-run;k<c;k++) matched[r][k]=true;
+          run=1;
+        }
+      }
+    }
+    // 縦
+    for(let c=0;c<SIZE;c++){
+      let run=1;
+      for(let r=1;r<=SIZE;r++){
+        if(r<SIZE && board[r][c]!==null && board[r][c]===board[r-1][c]) run++;
+        else{
+          if(run>=3) for(let k=r-run;k<r;k++) matched[k][c]=true;
+          run=1;
+        }
+      }
+    }
+    const list=[];
+    for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++) if(matched[r][c]) list.push({r,c});
+    return list;
+  }
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>toastEl.classList.remove("show"), 700);
+  }
+
+  // ===== 消去・重力・補充・連鎖 =====
+  async function resolveMatches(){
+    let combo = 0;
+    while(true){
+      const matches = findMatches();
+      if(matches.length===0) break;
+      combo++;
+
+      // 加点
+      const gained = matches.length * 10 * combo;
+      score += gained;
+      if(combo>=2) showToast(`コンボ ×${combo}！ +${gained}`);
+      updateHUD();
+
+      // ポップ演出
+      matches.forEach(({r,c})=> cellAt(r,c).classList.add("pop"));
+      await sleep(260);
+      matches.forEach(({r,c})=>{ board[r][c]=null; cellAt(r,c).classList.remove("pop"); });
+
+      // 重力：列ごとに下へ詰める
+      for(let c=0;c<SIZE;c++){
+        let write = SIZE-1;
+        for(let r=SIZE-1;r>=0;r--){
+          if(board[r][c]!==null){
+            board[write][c] = board[r][c];
+            if(write!==r) board[r][c]=null;
+            write--;
+          }
+        }
+        // 上部を新規補充
+        for(let r=write;r>=0;r--) board[r][c] = rndType();
+      }
+      render();
+      // 落下アニメ（全セル軽く）
+      for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+        const el=cellAt(r,c); el.classList.add("drop");
+      }
+      await sleep(260);
+      for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++) cellAt(r,c).classList.remove("drop");
+    }
+    return combo;
+  }
+
+  function adjacent(a,b){
+    return Math.abs(a.r-b.r) + Math.abs(a.c-b.c) === 1;
+  }
+
+  function swap(a,b){
+    const t = board[a.r][a.c];
+    board[a.r][a.c] = board[b.r][b.c];
+    board[b.r][b.c] = t;
+  }
+
+  async function trySwap(a,b){
+    busy = true;
+    swap(a,b);
+    render();
+    await sleep(150);
+
+    if(findMatches().length===0){
+      // 不成立 → 戻す
+      swap(a,b);
+      render();
+      showToast("そろわないよ！");
+      await sleep(150);
+      busy = false;
+      return;
+    }
+
+    // 成立 → 手数消費＆連鎖処理
+    moves--;
+    updateHUD();
+    await resolveMatches();
+    busy = false;
+    checkGameEnd();
+  }
+
+  // ===== 入力 =====
+  function clearSel(){
+    if(sel){ const el=cellAt(sel.r,sel.c); if(el) el.classList.remove("sel"); }
+    sel=null;
+  }
+
+  async function pick(r,c){
+    if(busy) return;
+    if(!sel){
+      sel={r,c};
+      cellAt(r,c).classList.add("sel");
+      return;
+    }
+    if(sel.r===r && sel.c===c){ clearSel(); return; }   // 同じマス→解除
+    if(adjacent(sel,{r,c})){
+      const a=sel; clearSel();
+      await trySwap(a,{r,c});
+    }else{
+      // 離れたマス→選び直し
+      clearSel();
+      sel={r,c};
+      cellAt(r,c).classList.add("sel");
+    }
+  }
+
+  // クリック
+  boardEl.addEventListener("click", e=>{
+    const cell = e.target.closest(".cell");
+    if(!cell) return;
+    pick(+cell.dataset.r, +cell.dataset.c);
+  });
+
+  // スワイプ（ドラッグ）
+  let dragStart=null;
+  function cellFromPoint(x,y){
+    const el = document.elementFromPoint(x,y);
+    const cell = el && el.closest ? el.closest(".cell") : null;
+    if(!cell || !boardEl.contains(cell)) return null;
+    return {r:+cell.dataset.r, c:+cell.dataset.c};
+  }
+  boardEl.addEventListener("pointerdown", e=>{
+    if(busy) return;
+    dragStart = cellFromPoint(e.clientX, e.clientY);
+  });
+  boardEl.addEventListener("pointerup", e=>{
+    if(busy || !dragStart) { dragStart=null; return; }
+    const end = cellFromPoint(e.clientX, e.clientY);
+    if(end && adjacent(dragStart,end)){
+      clearSel();
+      const a=dragStart; dragStart=null;
+      trySwap(a,end);
+    }
+    dragStart=null;
+  });
+
+  // ===== 終了判定 =====
+  function checkGameEnd(){
+    if(score >= GOAL){
+      showDialog(true);
+    }else if(moves<=0){
+      showDialog(false);
+    }
+  }
+  function showDialog(win){
+    dialog.classList.toggle("win", win);
+    dialog.classList.toggle("lose", !win);
+    dlgTitle.textContent = win ? "🎉 クリア！" : "😿 ざんねん…";
+    dlgText.textContent  = win
+      ? `スコア ${score}！ もくひょう達成だよ🌟`
+      : `スコア ${score}。もう一回ためそう！`;
+    overlay.classList.add("show");
+  }
+
+  // ===== 起動 =====
+  function newGame(){
+    overlay.classList.remove("show");
+    score = 0;
+    moves = MAX_MOVES;
+    sel = null;
+    busy = false;
+    createBoard();
+    render();
+    updateHUD();
+  }
+
+  document.getElementById("restartBtn").addEventListener("click", newGame);
+  document.getElementById("dlgBtn").addEventListener("click", newGame);
+
+  buildGrid();
+  newGame();
+</script>
+</body>
+</html>
