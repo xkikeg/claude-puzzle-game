@@ -61,7 +61,7 @@
   .cell{
     position:relative;
     border-radius:14px;
-    background:#f4f1fb no-repeat center/82%;
+    background:#f4f1fb no-repeat center/92%;
     background-image: var(--img);
     cursor:pointer;
     transition: transform .14s ease, box-shadow .14s ease, opacity .18s ease;
@@ -114,7 +114,13 @@
     transition: transform .08s ease, box-shadow .08s ease;
   }
   .btn:active{ transform: translateY(4px); box-shadow:0 1px 0 #d8538a; }
-  .restart-row{ margin-top:14px; }
+  .restart-row{ margin-top:14px; display:flex; gap:10px; justify-content:center; }
+  .btn.ghost{
+    background:linear-gradient(180deg,#bdd9ff,#8fb8ff);
+    box-shadow:0 5px 0 #5f86c8, 0 8px 16px rgba(90,120,200,.4);
+  }
+  .btn.ghost:active{ box-shadow:0 1px 0 #5f86c8; }
+  .btn.ghost.off{ filter:grayscale(.7); opacity:.7; }
   .toast{
     position:absolute; top:8px; left:50%; transform:translateX(-50%);
     background:rgba(255,255,255,.95); color:#e26ba0; font-weight:800;
@@ -141,7 +147,10 @@
 
   <div class="restart-row">
     <button class="btn" id="restartBtn">さいしょから</button>
+    <button class="btn ghost" id="bgmBtn" title="BGM">🔊 BGM</button>
   </div>
+
+  <audio id="bgm" src="bgm_pumi_fighter.mp3" loop preload="auto"></audio>
 
   <div class="overlay" id="overlay">
     <div class="dialog" id="dialog">
@@ -159,14 +168,14 @@
 
   // 使用する8キャラ（同フォルダの相対パス）
   const IMAGES = [
-    "無題65_20260609123918.png", // クリーム+赤帽子
-    "無題66_20260609124029.png", // 紫タコ
-    "無題68_20260609124401.png", // 濃ピンク
-    "無題69_20260609124647.png", // 緑・苺ヘタ
-    "無題70_20260609124833.png", // 赤白ボール
-    "無題72_20260609125200.png", // 水色
-    "無題73_20260609125311.png", // 薄ピンク雲
-    "無題78_20260609130719.png", // 薄紫・蝶ネクタイ
+    "tiles/無題65_20260609123918.png", // クリーム+赤帽子
+    "tiles/無題66_20260609124029.png", // 紫タコ
+    "tiles/無題68_20260609124401.png", // 濃ピンク
+    "tiles/無題69_20260609124647.png", // 緑・苺ヘタ
+    "tiles/無題70_20260609124833.png", // 赤白ボール
+    "tiles/無題72_20260609125200.png", // 水色
+    "tiles/無題73_20260609125311.png", // 薄ピンク雲
+    "tiles/無題78_20260609130719.png", // 薄紫・蝶ネクタイ
   ];
   // 画像が読めない場合のフォールバック色
   const FALLBACK = ["#f3d9a8","#b18cf0","#f57fc8","#7fd6a7","#ff5b5b","#4fd6f0","#f7b8d6","#c9c4f5"];
@@ -451,6 +460,38 @@
 
   document.getElementById("restartBtn").addEventListener("click", newGame);
   document.getElementById("dlgBtn").addEventListener("click", newGame);
+
+  // ===== BGM =====
+  const bgm = document.getElementById("bgm");
+  const bgmBtn = document.getElementById("bgmBtn");
+  let bgmOn = true;
+  bgm.volume = 0.5;
+
+  function startBGM(){
+    if(!bgmOn) return;
+    bgm.play().catch(()=>{}); // 自動再生制限時は無視
+  }
+  // 最初のユーザー操作で再生開始（ブラウザの自動再生制限対策）
+  function primeBGM(){
+    startBGM();
+    window.removeEventListener("pointerdown", primeBGM);
+    window.removeEventListener("keydown", primeBGM);
+  }
+  window.addEventListener("pointerdown", primeBGM);
+  window.addEventListener("keydown", primeBGM);
+
+  bgmBtn.addEventListener("click", ()=>{
+    bgmOn = !bgmOn;
+    if(bgmOn){
+      bgmBtn.classList.remove("off");
+      bgmBtn.textContent = "🔊 BGM";
+      bgm.play().catch(()=>{});
+    }else{
+      bgmBtn.classList.add("off");
+      bgmBtn.textContent = "🔇 BGM";
+      bgm.pause();
+    }
+  });
 
   buildGrid();
   newGame();
